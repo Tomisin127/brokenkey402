@@ -1,16 +1,17 @@
 {
-  "name": "brokenkeyremapper-api",
-  "version": "1.2.0",
-  "main": "server.js",
+  "name": "brokenkey-402-mainnet",
+  "version": "1.0.0",
+  "main": "index.js",
   "scripts": {
     "start": "node server.js"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
   "dependencies": {
-    "express": "^4.21.0",
-    "@x402/express": "latest",
-    "dotenv": "^16.4.5"
-  },
-  "engines": {
-    "node": "20"
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "x402-express": "^1.2.0"
   }
 }
