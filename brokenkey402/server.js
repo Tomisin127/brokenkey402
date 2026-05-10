@@ -1,5 +1,5 @@
 const express = require('express');
-const { paymentMiddleware } = require('@x402/express');
+const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
 const { HTTPFacilitatorClient } = require('@x402/core/server');
 const { ExactEvmScheme } = require('@x402/evm/exact/server');
 
@@ -25,7 +25,7 @@ const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po8
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// === CDP Authentication for Facilitator ===
+// === CDP Authentication ===
 const createCDPAuthHeaders = async () => {
   const credentials = Buffer.from(`\( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`).toString('base64');
   return {
@@ -35,10 +35,10 @@ const createCDPAuthHeaders = async () => {
 
 const facilitatorClient = new HTTPFacilitatorClient({
   url: FACILITATOR_URL,
-  createAuthHeaders: createCDPAuthHeaders,   // ← This fixes the 401
+  createAuthHeaders: createCDPAuthHeaders,
 });
 
-// Setup Resource Server
+// === x402 Resource Server ===
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
