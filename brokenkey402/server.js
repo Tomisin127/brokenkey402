@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
 const { HTTPFacilitatorClient } = require('@x402/core/server');
@@ -14,24 +15,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// === CONFIG ===
-const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";
+// Config from .env
+const PAY_TO = process.env.PAY_TO;
 const PRICE = "$0.01";
-const NETWORK = "eip155:8453";        // Base Mainnet
+const NETWORK = "eip155:8453";
 const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
-const CDP_API_KEY_ID = "df19051d-3e96-4b9a-9171-5540a16fcbee";
-const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po85hQGhyEjXtBvszD/PGtph6YrLw30KeX/Vw==";
+const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID;
+const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET;
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// === Proper CDP Bearer Token Auth ===
+// CDP JWT Auth (most reliable way)
 const createCDPAuthHeaders = async () => {
-  // Create JWT-style Bearer token for CDP
   const credentials = Buffer.from(`\( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`).toString('base64');
-  
   return {
-    Authorization: `Bearer ${credentials}`,   // CDP expects Bearer
+    Authorization: `Bearer ${credentials}`,
   };
 };
 
@@ -40,7 +39,6 @@ const facilitatorClient = new HTTPFacilitatorClient({
   createAuthHeaders: createCDPAuthHeaders,
 });
 
-// === x402 Setup ===
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
