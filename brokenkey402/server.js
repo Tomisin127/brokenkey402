@@ -13,7 +13,7 @@ app.use((req, res, next) => {
 });
 
 // === MAINNET CONFIG - ALL HARDCODED ===
-const PAY_TO = "0xc0887adf2411c4db859e497c1f931c59600b1ec4";           // ← CHANGE TO YOUR REAL BASE WALLET
+const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";           // ← CHANGE TO YOUR REAL BASE WALLET
 const PRICE = "$0.01";                                 // ← Change price (e.g. "$0.05", "$0.25")
 const NETWORK = "base";                                // or "base-mainnet" / "8453" — try "base" first
 const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
