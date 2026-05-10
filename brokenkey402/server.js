@@ -48,17 +48,16 @@ app.use(
   )
 );
 
-// The protected endpoint - returns download link after successful payment
-app.post('/download', (req, res) => {
-  console.log("✅ Payment received from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
-
+// Root endpoint for browsers and AI agents
+app.get('/', (req, res) => {
   res.json({
-    success: true,
-    message: "Thank you for your purchase!",
-    downloadLink: DOWNLOAD_LINK,
-    expiresIn: "24 hours",
-    version: "1.2",
-    instructions: "Download, extract, and run BrokenKeyRemapper.exe (Windows) or the equivalent for your OS."
+    name: 'BrokenKeyRemapper x402 API',
+    status: 'online',
+    description: 'Purchase BrokenKeyRemapper using USDC on Base via x402.',
+    purchaseEndpoint: '/download',
+    method: 'POST',
+    price: PRICE,
+    network: NETWORK
   });
 });
 
