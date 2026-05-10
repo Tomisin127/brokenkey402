@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const jwt = require('jsonwebtoken');                    // ← Add this
+const jwt = require('jsonwebtoken');
 const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
 const { HTTPFacilitatorClient } = require('@x402/core/server');
 const { ExactEvmScheme } = require('@x402/evm/exact/server');
@@ -8,7 +8,7 @@ const { ExactEvmScheme } = require('@x402/evm/exact/server');
 const app = express();
 app.use(express.json());
 
-// CORS (same as before)
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -16,7 +16,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Config
+// Mainnet Config
 const PAY_TO = process.env.PAY_TO;
 const PRICE = "$0.01";
 const NETWORK = "eip155:8453";                    // Base Mainnet
@@ -27,19 +27,30 @@ const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET;
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// Proper JWT for Coinbase CDP
+// Improved JWT for CDP
 const createCDPAuthHeaders = async () => {
-  const payload = {
-    iss: CDP_API_KEY_ID,
-    aud: FACILITATOR_URL,
-    exp: Math.floor(Date.now() / 1000) + 300,   // 5 minutes
-  };
+  try {
+    const payload = {
+      iss: CDP_API_KEY_ID,
+      aud: "https://api.cdp.coinbase.com",
+      exp: Math.floor(Date.now() / 1000) + 300,
+      sub: "x402",
+    };
 
-  const token = jwt.sign(payload, CDP_API_KEY_SECRET, { algorithm: 'HS256' });
+    const token = jwt.sign(payload, CDP_API_KEY_SECRET, { 
+      algorithm: 'HS256',
+      header: { typ: "JWT" }
+    });
 
-  return {
-    Authorization: `Bearer ${token}`,
-  };
+    console.log("🔑 JWT generated successfully for request");
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  } catch (err) {
+    console.error("❌ JWT generation failed:", err.message);
+    throw err;
+  }
 };
 
 const facilitatorClient = new HTTPFacilitatorClient({
@@ -78,6 +89,6 @@ app.get('/download', (req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`🚀 x402 v2 server running on port ${PORT} (Mainnet)`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 BrokenKeyRemapper x402 v2 Mainnet server running on port ${PORT}`);
 });
