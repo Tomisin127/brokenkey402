@@ -4,33 +4,31 @@ const { paymentMiddleware } = require('x402-express');
 const app = express();
 app.use(express.json());
 
-// CORS - allows calls from your brokenkeyremapper.xyz website
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, x402-*');
   next();
 });
 
-// === MAINNET CONFIG - ALL HARDCODED ===
-const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";           // ← CHANGE TO YOUR REAL BASE WALLET
-const PRICE = "$0.01";                                 // ← Change price (e.g. "$0.05", "$0.25")
-const NETWORK = "base";                                // or "base-mainnet" / "8453" — try "base" first
+// === MAINNET CONFIG ===
+const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";
+const PRICE = "$0.01";
+const NETWORK = "base";
 const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
-// Your CDP credentials (from https://cdp.coinbase.com)
-const CDP_API_KEY_ID = "df19051d-3e96-4b9a-9171-5540a16fcbee";     // ← PASTE YOUR KEY ID
-const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po85hQGhyEjXtBvszD/PGtph6YrLw30KeX/Vw=="; // ← PASTE YOUR SECRET
+const CDP_API_KEY_ID = "df19051d-3e96-4b9a-9171-5540a16fcbee";
+const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po85hQGhyEjXtBvszD/PGtph6YrLw30KeX/Vw==";
 
-// Your software download link (update this!)
-const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";  // ← CHANGE TO REAL LINK
+const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// x402 payment middleware configuration
+// x402 payment middleware - Updated for GET
 app.use(
   paymentMiddleware(
-    PAY_TO,   // receiving wallet
+    PAY_TO,
     {
-      "POST /download": {
+      "GET /download": { // ← Changed to GET
         price: PRICE,
         network: NETWORK,
         config: {
@@ -47,7 +45,7 @@ app.use(
   )
 );
 
-// The protected endpoint - returns download link after successful payment
+// Protected GET endpoint
 app.get('/download', (req, res) => {
   console.log("✅ Payment received from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
 
@@ -63,5 +61,6 @@ app.get('/download', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 BrokenKeyRemapper x402 server running on http://localhost:${PORT}`);
-  console.log(`💰 Protected endpoint: POST /download  →  Price: ${PRICE} on Base Mainnet`);
+  console.log(`🚀 BrokenKeyRemapper x402 server running on port ${PORT}`);
+  console.log(`💰 Protected endpoint: GET /download → Price: ${PRICE} on ${NETWORK}`);
+});
