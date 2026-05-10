@@ -51,14 +51,13 @@ app.get('/', (req, res) => {
   });
 });
 
-// Apply x402 payment middleware
 app.use(
   paymentMiddleware(
-    PAY_TO,
     {
       "POST /download": {
         price: PRICE,
         network: NETWORK,
+        payTo: PAY_TO,
         config: {
           description: "Broken Key Remapper Full Software Download",
           mimeType: "application/json",
