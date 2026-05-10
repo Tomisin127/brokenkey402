@@ -1,8 +1,8 @@
-require('dotenv').config();
-const express = require('express');
-const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
-const { ExactEvmScheme } = require('@x402/evm/exact/server');
-const { facilitator } = require('@coinbase/x402');   // ← Official CDP helper
+import 'dotenv/config';
+import express from 'express';
+import { paymentMiddleware, x402ResourceServer } from '@x402/express';
+import { ExactEvmScheme } from '@x402/evm/exact/server';
+import { HTTPFacilitatorClient } from '@x402/core/server';
 
 const app = express();
 app.use(express.json());
@@ -18,22 +18,26 @@ app.use((req, res, next) => {
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO;
 const PRICE = "$0.01";
-const NETWORK = "eip155:8453";        // Base Mainnet
+const NETWORK = "eip155:8453";   // Base Mainnet
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// ====================== x402 Setup (CDP) ======================
-const resourceServer = new x402ResourceServer(facilitator)
+// ====================== CDP Facilitator (Mainnet) ======================
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: "https://api.cdp.coinbase.com/platform/v2/x402",
+});
+
+const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
 const routes = {
   "GET /download": {
-    accepts: {
+    accepts: [{
       scheme: "exact",
       price: PRICE,
       network: NETWORK,
       payTo: PAY_TO,
-    },
+    }],
     description: "Broken Key Remapper Full Software Download",
     mimeType: "application/json",
   }
@@ -58,9 +62,9 @@ app.get('/download', (req, res) => {
 // ====================== Start Server ======================
 const PORT = process.env.PORT || 8080;
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 BrokenKeyRemapper x402 v2 Mainnet server running on port ${PORT}`);
   console.log(`   Network : ${NETWORK}`);
   console.log(`   Price   : ${PRICE}`);
-  console.log(`   PayTo   : ${PAY_TO}`);
+  console.log(`   PayTo   : ${PAY_TO || 'NOT SET - CHECK ENV'}`);
 });
