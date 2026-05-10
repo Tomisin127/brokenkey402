@@ -1,4 +1,8 @@
-{
+{ 
+  
+  "scripts":{
+     "start": "node server.js
+     },
   "name": "brokenkey-402-mainnet",
   "version": "1.0.0",
   "main": "index.js",
