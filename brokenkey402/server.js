@@ -1,5 +1,5 @@
 const express = require('express');
-const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
+const { paymentMiddleware } = require('@x402/express');
 const { HTTPFacilitatorClient } = require('@x402/core/server');
 const { ExactEvmScheme } = require('@x402/evm/exact/server');
 
@@ -14,23 +14,35 @@ app.use((req, res, next) => {
   next();
 });
 
-// === MAINNET CONFIG ===
+// === CONFIG ===
 const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";
 const PRICE = "$0.01";
-const NETWORK = "eip155:8453";           // Base Mainnet (CAIP-2 format)
+const NETWORK = "eip155:8453";        // Base Mainnet
 const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
+
+const CDP_API_KEY_ID = "df19051d-3e96-4b9a-9171-5540a16fcbee";
+const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po85hQGhyEjXtBvszD/PGtph6YrLw30KeX/Vw==";
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// Setup x402 v2 Resource Server
+// === CDP Authentication for Facilitator ===
+const createCDPAuthHeaders = async () => {
+  const credentials = Buffer.from(`\( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`).toString('base64');
+  return {
+    Authorization: `Basic ${credentials}`,
+  };
+};
+
 const facilitatorClient = new HTTPFacilitatorClient({
   url: FACILITATOR_URL,
+  createAuthHeaders: createCDPAuthHeaders,   // ← This fixes the 401
 });
 
+// Setup Resource Server
 const resourceServer = new x402ResourceServer(facilitatorClient)
-  .register(NETWORK, new ExactEvmScheme());   // Register EVM exact payment scheme
+  .register(NETWORK, new ExactEvmScheme());
 
-// Protected route config for v2
+// Routes
 const routes = {
   "GET /download": {
     accepts: {
@@ -44,16 +56,9 @@ const routes = {
   }
 };
 
-// Apply x402 v2 middleware
-app.use(
-  paymentMiddleware(
-    routes,
-    resourceServer
-    // You can add paywallConfig here later if you want a nice UI
-  )
-);
+// Apply middleware
+app.use(paymentMiddleware(routes, resourceServer));
 
-// Protected endpoint
 app.get('/download', (req, res) => {
   console.log("✅ Payment received from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
 
@@ -63,13 +68,12 @@ app.get('/download', (req, res) => {
     downloadLink: DOWNLOAD_LINK,
     expiresIn: "24 hours",
     version: "1.2",
-    instructions: "Download, extract, and run BrokenKeyRemapper.exe (Windows) or the equivalent for your OS."
+    instructions: "Download, extract, and run BrokenKeyRemapper.exe"
   });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 BrokenKeyRemapper x402 v2 server running on port ${PORT}`);
-  console.log(`💰 Protected endpoint: GET /download → ${PRICE} on Base`);
-});        
-    
+  console.log(`💰 Protected: GET /download → ${PRICE} on Base Mainnet`);
+});
