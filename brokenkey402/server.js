@@ -3,7 +3,6 @@ import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
-import { generateJwt } from '@coinbase/cdp-sdk/auth';
 
 const app = express();
 app.use(express.json());
@@ -12,42 +11,25 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x402-*, payment-signature, payment-required');
+  res.header('Access-Control-Allow-Headers', '*');
   next();
 });
 
-// ====================== Config ======================
-const PAY_TO = process.env.PAY_TO;
+// ====================== TESTNET CONFIG ======================
+const PAY_TO = process.env.PAY_TO?.trim();
 const PRICE = "$0.01";
-const NETWORK = "eip155:8453";
+const NETWORK = "eip155:84532";                    // Base Sepolia (Testnet)
+const FACILITATOR_URL = "https://x402.org/facilitator";   // Free, no auth needed
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// ====================== CDP Auth (Critical Fix) ======================
-const createAuthHeaders = async () => {
-  try {
-    const token = await generateJwt({
-      apiKeyId: process.env.CDP_API_KEY_ID,
-      apiKeySecret: process.env.CDP_API_KEY_SECRET,
-      requestMethod: "GET",
-      requestHost: "api.cdp.coinbase.com",
-      requestPath: "/platform/v2/x402/supported",   // Important for getSupported
-      expiresIn: 180,
-    });
-
-    return {
-      Authorization: `Bearer ${token}`,
-    };
-  } catch (err) {
-    console.error("❌ JWT Generation Failed:", err.message);
-    throw err;
-  }
-};
+console.log("🚀 Using Testnet Facilitator (no API key needed)");
+console.log("💰 PAY_TO:", PAY_TO || "❌ MISSING");
 
 // ====================== x402 Setup ======================
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: "https://api.cdp.coinbase.com/platform/v2/x402",
-  createAuthHeaders,
+  url: FACILITATOR_URL,
+  // No createAuthHeaders needed for x402.org
 });
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
@@ -70,23 +52,19 @@ app.use(paymentMiddleware(routes, resourceServer));
 
 // Protected Route
 app.get('/download', (req, res) => {
-  console.log("✅ Payment received from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
-
+  console.log("✅ Payment received from:", req.x402Payment?.payer || "unknown");
   res.json({
     success: true,
-    message: "Thank you for your purchase!",
+    message: "Thank you for your purchase! (Testnet)",
     downloadLink: DOWNLOAD_LINK,
     expiresIn: "24 hours",
-    version: "1.2",
-    instructions: "Download, extract, and run BrokenKeyRemapper.exe"
+    version: "1.2"
   });
 });
 
-// Start Server
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`🚀 BrokenKeyRemapper x402 v2 Mainnet running on port ${PORT}`);
-  console.log(`   PayTo   : ${PAY_TO || 'MISSING'}`);
-  console.log(`   Network : ${NETWORK}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 BrokenKeyRemapper x402 TESTNET running on port ${PORT}`);
+  console.log(`   Network : ${NETWORK} (Base Sepolia)`);
   console.log(`   Price   : ${PRICE}`);
 });
