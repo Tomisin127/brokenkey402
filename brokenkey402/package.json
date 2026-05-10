@@ -15,6 +15,8 @@
   "@x402/express": "latest",
   "@x402/core": "latest",
   "@x402/evm": "latest", 
-  "jsonwebtoken": "^9.0.2"
+  "jsonwebtoken": "^9.0.2", 
+  "@coinbase/cdp-sdk": "latest",
+  "dotenv": "^16.4.5"
 }
 }
