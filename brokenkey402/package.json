@@ -1,22 +1,21 @@
 {
-  "name": "brokenkey-402-mainnet",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "brokenkeyremapper-x402",
+  "version": "2.0.0",
+  "description": "Broken Key Remapper - x402 protected download (CDP Mainnet)",
+  "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-"dependencies": {
-  "dotenv": "^17.4.2",
-  "express": "^5.2.1",
-  "@x402/express": "latest",
-  "@x402/core": "latest",
-  "@x402/evm": "latest", 
-  "jsonwebtoken": "^9.0.2", 
-  "@coinbase/cdp-sdk": "latest",
-  "dotenv": "^16.4.5"
-}
+  "dependencies": {
+    "express": "^4.21.0",
+    "@x402/express": "latest",
+    "@x402/core": "latest",
+    "@x402/evm": "latest",
+    "@coinbase/x402": "latest",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }
