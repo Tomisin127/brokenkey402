@@ -73,7 +73,7 @@ app.get('/download', (req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`🚀 BrokenKeyRemapper x402 v2 server running on port ${PORT}`);
   console.log(`💰 Protected: GET /download → ${PRICE} on Base Mainnet`);
 });
