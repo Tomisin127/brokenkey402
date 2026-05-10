@@ -12,18 +12,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// === MAINNET CONFIG - ALL HARDCODED ===
-const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";           // ← CHANGE TO YOUR REAL BASE WALLET
-const PRICE = "$0.01";                                 // ← Change price (e.g. "$0.05", "$0.25")
+// === CONFIG - loaded from environment variables ===
+const PAY_TO = process.env.PAY_TO || "0xB91504d6F77d36923376c302cCC0237dF0efAa35";
+const PRICE = process.env.PRICE || "$0.01";
 const NETWORK = "base";                                // or "base-mainnet" / "8453" — try "base" first
 const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
-// Your CDP credentials (from https://cdp.coinbase.com)
-const CDP_API_KEY_ID = "df19051d-3e96-4b9a-9171-5540a16fcbee";     // ← PASTE YOUR KEY ID
-const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po85hQGhyEjXtBvszD/PGtph6YrLw30KeX/Vw=="; // ← PASTE YOUR SECRET
+// Your CDP credentials — set these as Railway environment variables
+const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID;
+const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET;
 
-// Your software download link (update this!)
-const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";  // ← CHANGE TO REAL LINK
+// Your software download link
+const DOWNLOAD_LINK = process.env.DOWNLOAD_LINK || "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
+
 
 // x402 payment middleware configuration
 app.use(
@@ -65,3 +66,4 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 BrokenKeyRemapper x402 server running on http://localhost:${PORT}`);
   console.log(`💰 Protected endpoint: POST /download  →  Price: ${PRICE} on Base Mainnet`);
+});
