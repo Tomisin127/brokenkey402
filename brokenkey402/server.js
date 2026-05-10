@@ -25,11 +25,13 @@ const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po8
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
-// === CDP Authentication ===
+// === Proper CDP Bearer Token Auth ===
 const createCDPAuthHeaders = async () => {
+  // Create JWT-style Bearer token for CDP
   const credentials = Buffer.from(`\( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`).toString('base64');
+  
   return {
-    Authorization: `Basic ${credentials}`,
+    Authorization: `Bearer ${credentials}`,   // CDP expects Bearer
   };
 };
 
@@ -38,11 +40,10 @@ const facilitatorClient = new HTTPFacilitatorClient({
   createAuthHeaders: createCDPAuthHeaders,
 });
 
-// === x402 Resource Server ===
+// === x402 Setup ===
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
-// Routes
 const routes = {
   "GET /download": {
     accepts: {
@@ -56,7 +57,6 @@ const routes = {
   }
 };
 
-// Apply middleware
 app.use(paymentMiddleware(routes, resourceServer));
 
 app.get('/download', (req, res) => {
