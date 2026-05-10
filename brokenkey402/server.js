@@ -62,7 +62,7 @@ app.post('/download', (req, res) => {
   });
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 BrokenKeyRemapper x402 server running on http://localhost:${PORT}`);
   console.log(`💰 Protected endpoint: POST /download  →  Price: ${PRICE} on Base Mainnet`);
