@@ -1,76 +1,55 @@
 const express = require('express');
-const { paymentMiddleware } = require('@x402/express');
+const { paymentMiddleware } = require('x402-express');
 
 const app = express();
-
-// Load env vars (helpful for local testing too)
-require('dotenv').config();
-
 app.use(express.json());
 
-// CORS
+// CORS - allows calls from your brokenkeyremapper.xyz website
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x402-*, authorization');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x402-*');
   next();
 });
 
-// ====================== CONFIG ======================
-const PAY_TO = process.env.PAY_TO || "0xB91504d6F77d36923376c302cCC0237dF0efAa35";
-const PRICE = process.env.PRICE || "$0.01";
-const NETWORK = process.env.NETWORK || "base"; // "base" or "eip155:8453"
-const DOWNLOAD_LINK = process.env.DOWNLOAD_LINK || "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
+// === MAINNET CONFIG - ALL HARDCODED ===
+const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";           // ← CHANGE TO YOUR REAL BASE WALLET
+const PRICE = "$0.01";                                 // ← Change price (e.g. "$0.05", "$0.25")
+const NETWORK = "base";                                // or "base-mainnet" / "8453" — try "base" first
+const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
-// CDP Facilitator (Coinbase)
-const FACILITATOR = {
-  url: "https://api.cdp.coinbase.com/platform/v2/x402",
-  apiKeyId: process.env.CDP_API_KEY_ID,
-  apiKeySecret: process.env.CDP_API_KEY_SECRET,
-};
+// Your CDP credentials (from https://cdp.coinbase.com)
+const CDP_API_KEY_ID = "df19051d-3e96-4b9a-9171-5540a16fcbee";     // ← PASTE YOUR KEY ID
+const CDP_API_KEY_SECRET = "B+VFaTzVdUHvaQa5Ag2ghFnT4mGWE+/lvldhM2pk5qKcXdw/9Po85hQGhyEjXtBvszD/PGtph6YrLw30KeX/Vw=="; // ← PASTE YOUR SECRET
 
-// Safety check
-if (!process.env.CDP_API_KEY_ID || !process.env.CDP_API_KEY_SECRET) {
-  console.error("❌ Missing CDP_API_KEY_ID or CDP_API_KEY_SECRET environment variables!");
-  console.error("Please add them in Railway Dashboard → Variables");
-}
+// Your software download link (update this!)
+const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";  // ← CHANGE TO REAL LINK
 
-// ====================== ROUTES ======================
-
-// Public root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    name: 'BrokenKeyRemapper x402 API',
-    status: 'online',
-    description: 'Purchase BrokenKeyRemapper using USDC on Base via x402.',
-    purchaseEndpoint: '/download',
-    method: 'POST',
-    price: PRICE,
-    network: NETWORK,
-    payTo: PAY_TO
-  });
-});
-
+// x402 payment middleware configuration
 app.use(
   paymentMiddleware(
+    PAY_TO,   // receiving wallet
     {
       "POST /download": {
         price: PRICE,
         network: NETWORK,
-        payTo: PAY_TO,
         config: {
           description: "Broken Key Remapper Full Software Download",
           mimeType: "application/json",
         }
       }
     },
-    FACILITATOR
+    {
+      url: FACILITATOR_URL,
+      apiKeyId: CDP_API_KEY_ID,
+      apiKeySecret: CDP_API_KEY_SECRET
+    }
   )
 );
 
-// Protected download endpoint
-app.post('/download', (req, res) => {
-  console.log("✅ Payment successful from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
+// The protected endpoint - returns download link after successful payment
+app.get('/download', (req, res) => {
+  console.log("✅ Payment received from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
 
   res.json({
     success: true,
@@ -82,12 +61,7 @@ app.post('/download', (req, res) => {
   });
 });
 
-// Health check
-app.get('/health', (req, res) => res.status(200).send('OK'));
-
-// Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 BrokenKeyRemapper x402 server running on port ${PORT}`);
-  console.log(`💰 Protected endpoint: POST /download → Price: ${PRICE} on ${NETWORK}`);
-});
+app.listen(PORT, () => {
+  console.log(`🚀 BrokenKeyRemapper x402 server running on http://localhost:${PORT}`);
+  console.log(`💰 Protected endpoint: POST /download  →  Price: ${PRICE} on Base Mainnet`);
