@@ -1,4 +1,11 @@
 import 'dotenv/config';
+
+// FIX: unescape \n in PEM private key if Railway stored it as one line
+if (process.env.CDP_API_KEY_SECRET?.includes('\\n')) {
+  process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET.replace(/\\n/g, '\n');
+  console.log("[v0] Unescaped \\n in CDP_API_KEY_SECRET");
+}
+
 import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
@@ -8,12 +15,11 @@ import { facilitator } from '@coinbase/x402';
 const app = express();
 app.use(express.json());
 
-// ====================== CORS (expose x402 headers!) ======================
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', '*');
-  // CRITICAL: browsers/clients must be able to READ these x402 headers
   res.header(
     'Access-Control-Expose-Headers',
     'PAYMENT-REQUIRED, X-PAYMENT-RESPONSE, x-payment-response, payment-required'
@@ -27,13 +33,11 @@ const PAY_TO = process.env.PAY_TO?.trim();
 const PRICE = "$0.01";
 const NETWORK = "eip155:8453"; // Base Mainnet
 
-// Google Drive DIRECT download URL (not /view)
 const DRIVE_FILE_ID = "1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp";
 const DOWNLOAD_LINK = `https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}`;
 
 const PORT = Number(process.env.PORT) || 8080;
 
-// Validate env BEFORE doing anything fragile
 const missing = [];
 if (!PAY_TO) missing.push("PAY_TO");
 if (!process.env.CDP_API_KEY_ID) missing.push("CDP_API_KEY_ID");
@@ -43,11 +47,15 @@ console.log("BrokenKeyRemapper x402 Mainnet");
 console.log("Price:", PRICE);
 console.log("Network:", NETWORK);
 console.log("PayTo:", PAY_TO || "MISSING");
-console.log("CDP_API_KEY_ID:", process.env.CDP_API_KEY_ID ? "set" : "MISSING");
-console.log("CDP_API_KEY_SECRET:", process.env.CDP_API_KEY_SECRET ? "set" : "MISSING");
+console.log("CDP_API_KEY_ID:", process.env.CDP_API_KEY_ID ? `set (${process.env.CDP_API_KEY_ID.slice(0, 8)}...)` : "MISSING");
+console.log(
+  "CDP_API_KEY_SECRET:",
+  process.env.CDP_API_KEY_SECRET
+    ? `set (${process.env.CDP_API_KEY_SECRET.length} chars, starts with "${process.env.CDP_API_KEY_SECRET.slice(0, 27)}")`
+    : "MISSING"
+);
 
-// ====================== Health check (must be BEFORE 404 handler) ======================
-// Railway pings "/" to verify the service is alive
+// ====================== Health check ======================
 app.get('/', (req, res) => {
   res.json({
     status: "ok",
@@ -58,6 +66,7 @@ app.get('/', (req, res) => {
     endpoint: "/download",
     envOk: missing.length === 0,
     missingEnv: missing,
+    cdpKeyLooksLikePem: process.env.CDP_API_KEY_SECRET?.includes('BEGIN') ?? false,
   });
 });
 
@@ -74,31 +83,26 @@ try {
   const resourceServer = new x402ResourceServer(facilitatorClient)
     .register(NETWORK, new ExactEvmScheme());
 
-  // CRITICAL FIX: `accepts` is a SINGLE OBJECT in v2, not an array
+  // accepts MUST be an array per the official x402 spec
   const routes = {
     "GET /download": {
-      accepts: {
-        scheme: "exact",
-        price: PRICE,
-        network: NETWORK,
-        payTo: PAY_TO,
-        maxTimeoutSeconds: 60,
-      },
+      accepts: [
+        {
+          scheme: "exact",
+          price: PRICE,
+          network: NETWORK,
+          payTo: PAY_TO,
+        },
+      ],
       description: "Broken Key Remapper Full Software Download",
       mimeType: "application/json",
     },
   };
 
-  // Payment middleware MUST be registered BEFORE the protected route handler
-  // and BEFORE any auth middleware
   app.use(paymentMiddleware(routes, resourceServer));
 
-  // ====================== Protected Endpoint ======================
   app.get('/download', (req, res) => {
-    const payer =
-      req.x402Payment?.payer ||
-      req.x402?.payment?.payer ||
-      "unknown";
+    const payer = req.x402Payment?.payer || req.x402?.payment?.payer || "unknown";
     console.log("Payment verified from:", payer);
 
     res.json({
@@ -116,8 +120,6 @@ try {
 } catch (err) {
   console.error("Failed to initialize x402:", err);
 
-  // Fail-soft: keep the server alive so Railway healthchecks pass
-  // and so /download tells you exactly what's broken instead of crashing the container
   app.get('/download', (req, res) => {
     res.status(500).json({
       error: "x402 not initialized",
@@ -127,7 +129,7 @@ try {
   });
 }
 
-// ====================== 404 handler (MUST be last) ======================
+// 404 (must be last)
 app.use((req, res) => {
   res.status(404).json({
     error: "Route not found",
@@ -137,15 +139,11 @@ app.use((req, res) => {
   });
 });
 
-// ====================== Start server ======================
-// Bind to 0.0.0.0 for Railway / Docker
 app.listen(PORT, () => {
   console.log(`Server listening on 0.0.0.0:${PORT}`);
   console.log(`x402 ready: ${x402Ready}`);
-  console.log(`Test: curl -i https://api.brokenkeyremapper.xyz/download`);
 });
 
-// Don't let unhandled errors silently kill the process
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
 });
