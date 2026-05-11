@@ -34,23 +34,33 @@ if (!PAY_TO) {
   process.exit(1);
 }
 
+// ====================== CDP Credentials Check ======================
+const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
+const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
+
+if (!CDP_API_KEY_ID || !CDP_API_KEY_SECRET) {
+  console.error("❌ CRITICAL: CDP_API_KEY_ID and CDP_API_KEY_SECRET are missing!");
+  console.error("Please add them in your hosting platform's environment variables.");
+}
+
 // ====================== x402 CDP Mainnet Setup ======================
 const facilitatorClient = new HTTPFacilitatorClient({
   url: "https://api.cdp.coinbase.com/platform/v2/x402",
-  // SDK will automatically read: CDP_API_KEY_ID and CDP_API_KEY_SECRET
+  apiKeyId: CDP_API_KEY_ID,
+  apiKeySecret: CDP_API_KEY_SECRET,
 });
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme())
-  .registerExtension(bazaarResourceServerExtension);   // ← Important for Bazaar
+  .registerExtension(bazaarResourceServerExtension);
 
-// ====================== Route + Bazaar Discovery ======================
+// ====================== Routes with Bazaar Metadata ======================
 const routes = {
   "GET /download": {
     accepts: [{
       scheme: "exact",
       network: NETWORK,
-      amount: "10000000",                    // 0.01 USDC (6 decimals)
+      amount: "10000000",                    // 0.01 USDC
       asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
       payTo: PAY_TO,
       maxTimeoutSeconds: 300,
@@ -67,7 +77,8 @@ const routes = {
             success: true,
             message: "Thank you for your purchase!",
             downloadLink: DOWNLOAD_LINK,
-            expiresIn: "24 hours"
+            expiresIn: "24 hours",
+            version: "1.2"
           }
         }
       })
@@ -75,10 +86,10 @@ const routes = {
   }
 };
 
-// 🔥 This MUST be registered BEFORE your routes
+// 🔥 Payment middleware MUST be first
 app.use(paymentMiddleware(routes, resourceServer));
 
-// ====================== Protected Endpoint ======================
+// ====================== Protected Route ======================
 app.get('/download', (req, res) => {
   console.log("✅ Payment verified from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
 
@@ -104,5 +115,5 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test: https://api.brokenkeyremapper.xyz/download`);
+  console.log(`→ Test endpoint: https://api.brokenkeyremapper.xyz/download`);
 });
