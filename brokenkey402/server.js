@@ -35,7 +35,7 @@ const NETWORK = 'eip155:8453'; // Base Mainnet
 // Override via FACILITATOR_URL env var if you want to use another one
 // e.g. https://facilitator.payai.network
 const FACILITATOR_URL =
-  process.env.FACILITATOR_URL?.trim() || 'https://x402.org/facilitator';
+  process.env.FACILITATOR_URL?.trim() || 'https://facilitator.payai.network';
 
 const DRIVE_FILE_ID = '1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp';
 const DOWNLOAD_LINK = `https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}`;
