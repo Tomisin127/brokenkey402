@@ -1,86 +1,87 @@
-import 'dotenv/config';
-import express from 'express';
-import { paymentMiddleware, x402ResourceServer } from '@x402/express';
-import { ExactEvmScheme } from '@x402/evm/exact/server';
-import { HTTPFacilitatorClient } from '@x402/core/server';
-import { facilitator } from '@coinbase/x402';   // Official CDP helper
+import express from "express";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+import { 
+  bazaarResourceServerExtension, 
+  declareDiscoveryExtension 
+} from "@x402/extensions/bazaar";
 
+// === CONFIG ===
 const app = express();
 app.use(express.json());
 
-// CORS
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', '*');
-  next();
+const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35"; // Your receiving address
+const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402"; // CDP for Bazaar indexing
+
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: FACILITATOR_URL,
+  // Add your CDP API keys here if required for production:
+  // apiKey: process.env.CDP_API_KEY,
+  // apiSecret: process.env.CDP_API_SECRET,
 });
 
-// ====================== Config ======================
-const PAY_TO = process.env.PAY_TO?.trim();
-const PRICE = "$0.01";
-const NETWORK = "eip155:8453";   // Base Mainnet
-
-const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
-
-console.log("🚀 BrokenKeyRemapper x402 Mainnet");
-console.log("💰 Price:", PRICE);
-console.log("🔗 Network:", NETWORK);
-console.log("📍 PayTo:", PAY_TO || "❌ MISSING");
-
-if (!PAY_TO) {
-  console.error("❌ CRITICAL: PAY_TO environment variable is missing!");
-  process.exit(1);
-}
-
-// ====================== x402 Setup (CDP Mainnet) ======================
-const facilitatorClient = new HTTPFacilitatorClient(facilitator);
-
 const resourceServer = new x402ResourceServer(facilitatorClient)
-  .register(NETWORK, new ExactEvmScheme());
+  .register("eip155:8453", new ExactEvmScheme())     // Base mainnet
+  // .register("eip155:84532", new ExactEvmScheme()) // Base Sepolia for testing
+  .registerExtension(bazaarResourceServerExtension);   // ← Critical for Bazaar
 
+// Define your paid route(s)
 const routes = {
-  "GET /download": {
-    accepts: [{
-      scheme: "exact",
-      price: PRICE,
-      network: NETWORK,
-      payTo: PAY_TO,
-    }],
-    description: "Broken Key Remapper Full Software Download",
+  "GET /": {   // or whatever your actual route is (e.g. "GET /remap")
+    accepts: [
+      {
+        scheme: "exact",
+        network: "eip155:8453",           // Base mainnet (recommended)
+        amount: "10000000",               // 0.01 USDC (6 decimals)
+        asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
+        payTo: PAY_TO,
+        maxTimeoutSeconds: 300,
+      },
+    ],
+    description: "BrokenKeyRemapper.xyz helps you type anything on a broken keyboard",
     mimeType: "application/json",
+    extensions: {
+      ...declareDiscoveryExtension({
+        input: {
+          broken_text: "Th3 qu1ck br0wn f0x jump5 0v3r th3 l4zy d0g",
+          context: "English pangram",
+          max_suggestions: 3
+        },
+        // You can also pass inputSchema if you want stricter validation
+        output: {
+          example: {
+            corrected_text: "The quick brown fox jumps over the lazy dog",
+            original_input: "Th3 qu1ck br0wn f0x jump5 0v3r th3 l4zy d0g",
+            confidence: 0.94,
+            explanation: "Remapped common broken-key substitutions based on English context.",
+            alternative_suggestions: ["The quick brown fox jumps over the lazy dog."]
+          },
+          // Optional: full JSON schema (the helper can infer a lot)
+        }
+      })
+    }
   }
 };
 
-// 🔥 Middleware MUST be registered BEFORE any routes
+// Apply x402 middleware **before** your routes and any auth
 app.use(paymentMiddleware(routes, resourceServer));
 
-// ====================== Protected Endpoint ======================
-app.get('/download', (req, res) => {
-  console.log("✅ Payment verified from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
-
+// Your actual handler (only reached after successful payment)
+app.get("/", (req, res) => {
+  const brokenText = req.query.broken_text || req.body?.broken_text;
+  // ... your remapping logic here ...
   res.json({
-    success: true,
-    message: "Thank you for your purchase!",
-    downloadLink: DOWNLOAD_LINK,
-    expiresIn: "24 hours",
-    version: "1.2",
-    instructions: "Download, extract, and run BrokenKeyRemapper.exe"
+    corrected_text: "...",
+    original_input: brokenText,
+    confidence: 0.95,
+    explanation: "...",
+    alternative_suggestions: []
   });
 });
 
-// Debug 404s
-app.use((req, res) => {
-  res.status(404).json({ 
-    error: "Route not found", 
-    path: req.path,
-    method: req.method,
-    tip: "Make sure you're hitting /download exactly"
-  });
-});
-
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test endpoint: https://api.brokenkeyremapper.xyz/download`);
+  console.log(`✅ x402 endpoint running on http://localhost:${PORT}`);
+  console.log(`💰 Pay-to: ${PAY_TO}`);
 });
