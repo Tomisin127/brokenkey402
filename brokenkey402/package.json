@@ -1,19 +1,20 @@
 {
   "name": "brokenkeyremapper-x402",
   "version": "2.0.0",
-  "description": "Broken Key Remapper - x402 protected download (CDP Mainnet)",
+  "description": "Broken Key Remapper - x402 protected endpoint (CDP Bazaar)",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "express": "^4.21.0",
+    "dotenv": "^16.4.5",
     "@x402/express": "latest",
     "@x402/core": "latest",
     "@x402/evm": "latest",
-    "@coinbase/x402": "latest",
-    "dotenv": "^16.4.5"
+    "@x402/extensions": "latest"
   },
   "engines": {
     "node": ">=20"
