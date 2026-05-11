@@ -3,7 +3,7 @@ import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
-import { facilitator } from '@coinbase/x402';
+import { facilitator } from '@coinbase/x402';   // Official CDP helper
 
 const app = express();
 app.use(express.json());
@@ -19,7 +19,7 @@ app.use((req, res, next) => {
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
 const PRICE = "$0.01";
-const NETWORK = "eip155:8453";
+const NETWORK = "eip155:8453";   // Base Mainnet
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
@@ -30,9 +30,10 @@ console.log("📍 PayTo:", PAY_TO || "❌ MISSING");
 
 if (!PAY_TO) {
   console.error("❌ CRITICAL: PAY_TO environment variable is missing!");
+  process.exit(1);
 }
 
-// ====================== x402 Setup ======================
+// ====================== x402 Setup (CDP Mainnet) ======================
 const facilitatorClient = new HTTPFacilitatorClient(facilitator);
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
@@ -51,12 +52,12 @@ const routes = {
   }
 };
 
-// IMPORTANT: Middleware MUST be before route definitions
+// 🔥 Middleware MUST be registered BEFORE any routes
 app.use(paymentMiddleware(routes, resourceServer));
 
 // ====================== Protected Endpoint ======================
 app.get('/download', (req, res) => {
-  console.log("✅ Payment verified for:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
+  console.log("✅ Payment verified from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
 
   res.json({
     success: true,
@@ -68,17 +69,18 @@ app.get('/download', (req, res) => {
   });
 });
 
-// Catch-all for debugging
+// Debug 404s
 app.use((req, res) => {
   res.status(404).json({ 
     error: "Route not found", 
     path: req.path,
-    method: req.method 
+    method: req.method,
+    tip: "Make sure you're hitting /download exactly"
   });
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test: https://api.brokenkeyremapper.xyz/download`);
+  console.log(`→ Test endpoint: https://api.brokenkeyremapper.xyz/download`);
 });
