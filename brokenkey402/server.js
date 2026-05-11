@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
-const NETWORK = "eip155:8453";   // Base Mainnet
+const NETWORK = "eip155:8453";
 
 const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
 
@@ -34,16 +34,19 @@ if (!PAY_TO) {
   process.exit(1);
 }
 
-// ====================== CDP Credentials Check ======================
+// ====================== CDP Credentials ======================
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
 
+console.log("🔑 CDP_API_KEY_ID loaded:", CDP_API_KEY_ID ? "✅ YES" : "❌ MISSING");
+console.log("🔑 CDP_API_KEY_SECRET loaded:", CDP_API_KEY_SECRET ? "✅ YES" : "❌ MISSING");
+
 if (!CDP_API_KEY_ID || !CDP_API_KEY_SECRET) {
-  console.error("❌ CRITICAL: CDP_API_KEY_ID and CDP_API_KEY_SECRET are missing!");
-  console.error("Please add them in your hosting platform's environment variables.");
+  console.error("❌ CRITICAL: CDP_API_KEY_ID and/or CDP_API_KEY_SECRET are missing or empty!");
+  console.error("Please set them correctly in your hosting dashboard and redeploy.");
 }
 
-// ====================== x402 CDP Mainnet Setup ======================
+// ====================== x402 Setup ======================
 const facilitatorClient = new HTTPFacilitatorClient({
   url: "https://api.cdp.coinbase.com/platform/v2/x402",
   apiKeyId: CDP_API_KEY_ID,
@@ -54,14 +57,14 @@ const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme())
   .registerExtension(bazaarResourceServerExtension);
 
-// ====================== Routes with Bazaar Metadata ======================
+// ====================== Routes ======================
 const routes = {
   "GET /download": {
     accepts: [{
       scheme: "exact",
       network: NETWORK,
-      amount: "10000000",                    // 0.01 USDC
-      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
+      amount: "10000000",
+      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       payTo: PAY_TO,
       maxTimeoutSeconds: 300,
     }],
@@ -69,16 +72,13 @@ const routes = {
     mimeType: "application/json",
     extensions: {
       ...declareDiscoveryExtension({
-        input: {
-          broken_text: "Th3 qu1ck br0wn f0x jump5 0v3r th3 l4zy d0g",
-        },
+        input: { broken_text: "Th3 qu1ck br0wn f0x jump5 0v3r th3 l4zy d0g" },
         output: {
           example: {
             success: true,
             message: "Thank you for your purchase!",
             downloadLink: DOWNLOAD_LINK,
-            expiresIn: "24 hours",
-            version: "1.2"
+            expiresIn: "24 hours"
           }
         }
       })
@@ -86,34 +86,24 @@ const routes = {
   }
 };
 
-// 🔥 Payment middleware MUST be first
 app.use(paymentMiddleware(routes, resourceServer));
 
-// ====================== Protected Route ======================
+// Protected route
 app.get('/download', (req, res) => {
-  console.log("✅ Payment verified from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
-
   res.json({
     success: true,
     message: "Thank you for your purchase!",
     downloadLink: DOWNLOAD_LINK,
     expiresIn: "24 hours",
-    version: "1.2",
-    instructions: "Download, extract, and run BrokenKeyRemapper.exe"
+    version: "1.2"
   });
 });
 
-// 404 handler
 app.use((req, res) => {
-  res.status(404).json({ 
-    error: "Route not found", 
-    path: req.path,
-    tip: "Make sure you're hitting /download exactly"
-  });
+  res.status(404).json({ error: "Route not found", tip: "Use /download" });
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test endpoint: https://api.brokenkeyremapper.xyz/download`);
 });
