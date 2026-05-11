@@ -1,11 +1,15 @@
 import 'dotenv/config';
 import express from 'express';
+
 import {
   paymentMiddleware,
   ResourceServer,
 } from '@x402/express';
+
 import { ExactEvmScheme } from '@x402/evm';
-import { FacilitatorClient } from '@x402/core';
+
+import { HTTPFacilitatorClient } from '@x402/core';
+
 import {
   bazaarResourceServerExtension,
   declareDiscoveryExtension,
@@ -20,7 +24,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', '*');
 
-  // Handle preflight requests
+  // Handle browser preflight requests
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -31,32 +35,32 @@ app.use((req, res, next) => {
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
 const NETWORK = 'eip155:8453'; // Base Mainnet
-const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-
-if (!PAY_TO) {
-  throw new Error('❌ PAY_TO environment variable is missing');
-}
+const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
 
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
 
+if (!PAY_TO) {
+  throw new Error('PAY_TO environment variable is missing');
+}
+
 if (!CDP_API_KEY_ID || !CDP_API_KEY_SECRET) {
   throw new Error(
-    '❌ CDP_API_KEY_ID and CDP_API_KEY_SECRET must be set'
+    'CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables are required'
   );
 }
 
 console.log('🚀 BrokenKeyRemapper x402 Mainnet');
 console.log('🔗 Network:', NETWORK);
 console.log('📍 PayTo:', PAY_TO);
-console.log('🔑 CDP_API_KEY_ID: ✅ Loaded');
-console.log('🔑 CDP_API_KEY_SECRET: ✅ Loaded');
+console.log('🔑 CDP_API_KEY_ID:', CDP_API_KEY_ID ? '✅ Loaded' : '❌ Missing');
+console.log(
+  '🔑 CDP_API_KEY_SECRET:',
+  CDP_API_KEY_SECRET ? '✅ Loaded' : '❌ Missing'
+);
 
 // ====================== Facilitator ======================
-// IMPORTANT:
-// Use FacilitatorClient instead of HTTPFacilitatorClient.
-// The newer x402 packages expect FacilitatorClient from @x402/core.
-const facilitator = new FacilitatorClient({
+const facilitator = new HTTPFacilitatorClient({
   url: 'https://api.cdp.coinbase.com/platform/v2/x402',
   apiKeyId: CDP_API_KEY_ID,
   apiKeySecret: CDP_API_KEY_SECRET,
@@ -67,7 +71,7 @@ const resourceServer = new ResourceServer(facilitator)
   .register(NETWORK, new ExactEvmScheme())
   .registerExtension(bazaarResourceServerExtension);
 
-// ====================== Protected Routes Definition ======================
+// ====================== Protected Routes ======================
 const protectedRoutes = {
   'GET /download': {
     accepts: [
@@ -90,7 +94,8 @@ const protectedRoutes = {
         output: {
           example: {
             success: true,
-            downloadLink: 'https://drive.google.com/...',
+            downloadLink:
+              'https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk',
           },
         },
       }),
@@ -98,7 +103,7 @@ const protectedRoutes = {
   },
 };
 
-// ====================== x402 Payment Middleware ======================
+// ====================== Payment Middleware ======================
 app.use(paymentMiddleware(protectedRoutes, resourceServer));
 
 // ====================== Paid Endpoint ======================
@@ -112,16 +117,18 @@ app.get('/download', (req, res) => {
 });
 
 // ====================== Health Check ======================
-app.get('/', (_req, res) => {
+app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     service: 'BrokenKeyRemapper x402 API',
     network: NETWORK,
+    endpoint: '/download',
+    price: '10 USDC on Base Mainnet',
   });
 });
 
-// ====================== 404 ======================
-app.use((_req, res) => {
+// ====================== 404 Handler ======================
+app.use((req, res) => {
   res.status(404).json({
     error: 'Not found',
     hint: 'Use GET /download',
