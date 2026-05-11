@@ -1,79 +1,108 @@
-import express from "express";
-import dotenv from "dotenv";
-import { paymentMiddleware, x402ResourceServer } from "@x402/express";
-import { ExactEvmScheme } from "@x402/evm/exact/server";
-import { HTTPFacilitatorClient } from "@x402/core/server";
+import 'dotenv/config';
+import express from 'express';
+import { paymentMiddleware, x402ResourceServer } from '@x402/express';
+import { ExactEvmScheme } from '@x402/evm/exact/server';
+import { HTTPFacilitatorClient } from '@x402/core/server';
 import {
   bazaarResourceServerExtension,
   declareDiscoveryExtension,
-} from "@x402/extensions/bazaar";
-
-dotenv.config();
+} from '@x402/extensions/bazaar';
 
 const app = express();
 app.use(express.json());
 
-// === MAINNET CONFIG ===
-const PAY_TO = "0xB91504d6F77d36923376c302cCC0237dF0efAa35";
+// CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', '*');
+  next();
+});
 
+// ====================== Config ======================
+const PAY_TO = process.env.PAY_TO?.trim();
+const NETWORK = "eip155:8453";   // Base Mainnet
+
+const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
+
+console.log("🚀 BrokenKeyRemapper x402 Mainnet");
+console.log("🔗 Network:", NETWORK);
+console.log("📍 PayTo:", PAY_TO || "❌ MISSING");
+
+if (!PAY_TO) {
+  console.error("❌ CRITICAL: PAY_TO environment variable is missing!");
+  process.exit(1);
+}
+
+// ====================== x402 CDP Mainnet Setup ======================
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: "https://api.cdp.coinbase.com/platform/v2/x402",   // ← Mainnet CDP
-  // The SDK automatically uses these env vars for JWT auth:
-  // CDP_API_KEY_ID
-  // CDP_API_KEY_SECRET
+  url: "https://api.cdp.coinbase.com/platform/v2/x402",
+  // SDK will automatically read: CDP_API_KEY_ID and CDP_API_KEY_SECRET
 });
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
-  .register("eip155:8453", new ExactEvmScheme())           // Base Mainnet
-  .registerExtension(bazaarResourceServerExtension);
+  .register(NETWORK, new ExactEvmScheme())
+  .registerExtension(bazaarResourceServerExtension);   // ← Important for Bazaar
 
-// Route config (Bazaar ready)
+// ====================== Route + Bazaar Discovery ======================
 const routes = {
-  "GET /": {
-    accepts: [
-      {
-        scheme: "exact",
-        network: "eip155:8453",
-        amount: "10000000",                  // 0.01 USDC
-        asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        payTo: PAY_TO,
-        maxTimeoutSeconds: 300,
-      },
-    ],
-    description: "BrokenKeyRemapper.xyz helps you type anything on a broken keyboard",
+  "GET /download": {
+    accepts: [{
+      scheme: "exact",
+      network: NETWORK,
+      amount: "10000000",                    // 0.01 USDC (6 decimals)
+      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
+      payTo: PAY_TO,
+      maxTimeoutSeconds: 300,
+    }],
+    description: "Broken Key Remapper Full Software Download",
     mimeType: "application/json",
     extensions: {
       ...declareDiscoveryExtension({
         input: {
           broken_text: "Th3 qu1ck br0wn f0x jump5 0v3r th3 l4zy d0g",
-          context: "English pangram",
-          max_suggestions: 3,
         },
-        inputSchema: { /* your input schema from before */ },
         output: {
-          example: { /* your output example */ }
+          example: {
+            success: true,
+            message: "Thank you for your purchase!",
+            downloadLink: DOWNLOAD_LINK,
+            expiresIn: "24 hours"
+          }
         }
       })
     }
   }
 };
 
+// 🔥 This MUST be registered BEFORE your routes
 app.use(paymentMiddleware(routes, resourceServer));
 
-// Your handler
-app.get("/", async (req, res) => {
-  const brokenText = req.query.broken_text || req.body?.broken_text || "";
-  // Your real remapping logic here...
+// ====================== Protected Endpoint ======================
+app.get('/download', (req, res) => {
+  console.log("✅ Payment verified from:", req.x402Payment?.payer || req.x402Payment?.wallet || "unknown");
+
   res.json({
-    corrected_text: brokenText,
-    original_input: brokenText,
-    confidence: 0.92,
-    explanation: "AI remapping applied.",
-    alternative_suggestions: []
+    success: true,
+    message: "Thank you for your purchase!",
+    downloadLink: DOWNLOAD_LINK,
+    expiresIn: "24 hours",
+    version: "1.2",
+    instructions: "Download, extract, and run BrokenKeyRemapper.exe"
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: "Route not found", 
+    path: req.path,
+    tip: "Make sure you're hitting /download exactly"
   });
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`→ Test: https://api.brokenkeyremapper.xyz/download`);
 });
