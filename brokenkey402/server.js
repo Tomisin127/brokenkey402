@@ -3,6 +3,7 @@ import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
+import { facilitator } from '@coinbase/x402';   // Official CDP helper
 
 const app = express();
 app.use(express.json());
@@ -17,11 +18,6 @@ app.use((req, res, next) => {
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
-if (!PAY_TO) {
-  console.error("❌ PAY_TO environment variable is missing!");
-  process.exit(1);
-}
-
 const PRICE = "$0.01";
 const NETWORK = "eip155:8453";   // Base Mainnet
 
@@ -30,18 +26,16 @@ const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn8
 console.log("🚀 BrokenKeyRemapper x402 Mainnet");
 console.log("💰 Price:", PRICE);
 console.log("🔗 Network:", NETWORK);
-console.log("📍 PayTo:", PAY_TO);
+console.log("📍 PayTo:", PAY_TO || "❌ MISSING");
 
-// ====================== x402 Setup (CDP Mainnet) ======================
-const facilitatorClient = new HTTPFacilitatorClient({
-  url: "https://api.cdp.coinbase.com/platform/v2/x402",   // ← Official CDP Facilitator
-});
+// ====================== x402 Setup (Official CDP) ======================
+const facilitatorClient = new HTTPFacilitatorClient(facilitator);
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
 const routes = {
-  "GET /download": {
+  "GET /download": {                    // ← This key must exactly match METHOD + path
     accepts: [{
       scheme: "exact",
       price: PRICE,
@@ -53,7 +47,7 @@ const routes = {
   }
 };
 
-// Apply middleware **before** routes
+// Apply middleware BEFORE your route handlers
 app.use(paymentMiddleware(routes, resourceServer));
 
 // ====================== Protected Endpoint ======================
@@ -73,5 +67,5 @@ app.get('/download', (req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test at: http://localhost:${PORT}/download`);
+  console.log(`→ Test it at: http://your-domain.com/download`);
 });
