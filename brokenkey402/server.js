@@ -7,7 +7,7 @@ import { HTTPFacilitatorClient } from '@x402/core/server';
 const app = express();
 app.use(express.json());
 
-// CORS - keep it early
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -19,6 +19,7 @@ app.use((req, res, next) => {
 const PAY_TO = process.env.PAY_TO?.trim();
 if (!PAY_TO) {
   console.error("❌ PAY_TO environment variable is missing!");
+  process.exit(1);
 }
 
 const PRICE = "$0.01";
@@ -31,16 +32,16 @@ console.log("💰 Price:", PRICE);
 console.log("🔗 Network:", NETWORK);
 console.log("📍 PayTo:", PAY_TO);
 
-// ====================== x402 Setup ======================
+// ====================== x402 Setup (CDP Mainnet) ======================
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: "https://x402.org/facilitator"   // or your Coinbase CDP facilitator URL
+  url: "https://api.cdp.coinbase.com/platform/v2/x402",   // ← Official CDP Facilitator
 });
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
-  .register(NETWORK, new ExactEvmScheme());   // Register the scheme for your network
+  .register(NETWORK, new ExactEvmScheme());
 
 const routes = {
-  "GET /download": {                    // ← Important: "GET /download"
+  "GET /download": {
     accepts: [{
       scheme: "exact",
       price: PRICE,
@@ -52,7 +53,7 @@ const routes = {
   }
 };
 
-// **CRITICAL**: Apply payment middleware EARLY
+// Apply middleware **before** routes
 app.use(paymentMiddleware(routes, resourceServer));
 
 // ====================== Protected Endpoint ======================
@@ -72,5 +73,5 @@ app.get('/download', (req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test it at: http://localhost:${PORT}/download`);
+  console.log(`→ Test at: http://localhost:${PORT}/download`);
 });
