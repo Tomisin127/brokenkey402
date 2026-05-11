@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
-const PRICE = '$0.01';
+const PRICE = '$10';
 const NETWORK = 'eip155:8453'; // Base Mainnet (CAIP-2)
 
 // Facilitator selection:
