@@ -3,12 +3,11 @@ import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
-import { facilitator } from '@coinbase/x402';   // Official CDP helper
 
 const app = express();
 app.use(express.json());
 
-// CORS
+// CORS - keep it early
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -18,6 +17,10 @@ app.use((req, res, next) => {
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
+if (!PAY_TO) {
+  console.error("❌ PAY_TO environment variable is missing!");
+}
+
 const PRICE = "$0.01";
 const NETWORK = "eip155:8453";   // Base Mainnet
 
@@ -26,16 +29,18 @@ const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn8
 console.log("🚀 BrokenKeyRemapper x402 Mainnet");
 console.log("💰 Price:", PRICE);
 console.log("🔗 Network:", NETWORK);
-console.log("📍 PayTo:", PAY_TO || "❌ MISSING");
+console.log("📍 PayTo:", PAY_TO);
 
-// ====================== x402 Setup (Official CDP) ======================
-const facilitatorClient = new HTTPFacilitatorClient(facilitator);
+// ====================== x402 Setup ======================
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: "https://x402.org/facilitator"   // or your Coinbase CDP facilitator URL
+});
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
-  .register(NETWORK, new ExactEvmScheme());
+  .register(NETWORK, new ExactEvmScheme());   // Register the scheme for your network
 
 const routes = {
-  "GET /download": {
+  "GET /download": {                    // ← Important: "GET /download"
     accepts: [{
       scheme: "exact",
       price: PRICE,
@@ -47,6 +52,7 @@ const routes = {
   }
 };
 
+// **CRITICAL**: Apply payment middleware EARLY
 app.use(paymentMiddleware(routes, resourceServer));
 
 // ====================== Protected Endpoint ======================
@@ -66,5 +72,5 @@ app.get('/download', (req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`→ Test it at: http://your-domain.com/download`);
+  console.log(`→ Test it at: http://localhost:${PORT}/download`);
 });
