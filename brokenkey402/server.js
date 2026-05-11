@@ -1,109 +1,136 @@
 import 'dotenv/config';
 import express from 'express';
-import { paymentMiddleware, x402ResourceServer } from '@x402/express';
-import { ExactEvmScheme } from '@x402/evm/exact/server';
-import { HTTPFacilitatorClient } from '@x402/core/server';
+import {
+  paymentMiddleware,
+  ResourceServer,
+} from '@x402/express';
+import { ExactEvmScheme } from '@x402/evm';
+import { FacilitatorClient } from '@x402/core';
 import {
   bazaarResourceServerExtension,
   declareDiscoveryExtension,
-} from '@x402/extensions/bazaar';
+} from '@x402/extensions';
 
 const app = express();
 app.use(express.json());
 
-// CORS
+// ====================== CORS ======================
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', '*');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
   next();
 });
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
-const NETWORK = "eip155:8453";
-
-const DOWNLOAD_LINK = "https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk";
-
-console.log("🚀 BrokenKeyRemapper x402 Mainnet");
-console.log("🔗 Network:", NETWORK);
-console.log("📍 PayTo:", PAY_TO || "❌ MISSING");
+const NETWORK = 'eip155:8453'; // Base Mainnet
+const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 if (!PAY_TO) {
-  console.error("❌ CRITICAL: PAY_TO environment variable is missing!");
-  process.exit(1);
+  throw new Error('❌ PAY_TO environment variable is missing');
 }
 
-// ====================== CDP Credentials ======================
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
 
-console.log("🔑 CDP_API_KEY_ID loaded:", CDP_API_KEY_ID ? "✅ YES" : "❌ MISSING");
-console.log("🔑 CDP_API_KEY_SECRET loaded:", CDP_API_KEY_SECRET ? "✅ YES" : "❌ MISSING");
-
 if (!CDP_API_KEY_ID || !CDP_API_KEY_SECRET) {
-  console.error("❌ CRITICAL: CDP_API_KEY_ID and/or CDP_API_KEY_SECRET are missing or empty!");
-  console.error("Please set them correctly in your hosting dashboard and redeploy.");
+  throw new Error(
+    '❌ CDP_API_KEY_ID and CDP_API_KEY_SECRET must be set'
+  );
 }
 
-// ====================== x402 Setup ======================
-const facilitatorClient = new HTTPFacilitatorClient({
-  url: "https://api.cdp.coinbase.com/platform/v2/x402",
+console.log('🚀 BrokenKeyRemapper x402 Mainnet');
+console.log('🔗 Network:', NETWORK);
+console.log('📍 PayTo:', PAY_TO);
+console.log('🔑 CDP_API_KEY_ID: ✅ Loaded');
+console.log('🔑 CDP_API_KEY_SECRET: ✅ Loaded');
+
+// ====================== Facilitator ======================
+// IMPORTANT:
+// Use FacilitatorClient instead of HTTPFacilitatorClient.
+// The newer x402 packages expect FacilitatorClient from @x402/core.
+const facilitator = new FacilitatorClient({
+  url: 'https://api.cdp.coinbase.com/platform/v2/x402',
   apiKeyId: CDP_API_KEY_ID,
   apiKeySecret: CDP_API_KEY_SECRET,
 });
 
-const resourceServer = new x402ResourceServer(facilitatorClient)
+// ====================== Resource Server ======================
+const resourceServer = new ResourceServer(facilitator)
   .register(NETWORK, new ExactEvmScheme())
   .registerExtension(bazaarResourceServerExtension);
 
-// ====================== Routes ======================
-const routes = {
-  "GET /download": {
-    accepts: [{
-      scheme: "exact",
-      network: NETWORK,
-      amount: "10000000",
-      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      payTo: PAY_TO,
-      maxTimeoutSeconds: 300,
-    }],
-    description: "Broken Key Remapper Full Software Download",
-    mimeType: "application/json",
+// ====================== Protected Routes Definition ======================
+const protectedRoutes = {
+  'GET /download': {
+    accepts: [
+      {
+        scheme: 'exact',
+        network: NETWORK,
+        amount: '10000000', // 10 USDC (6 decimals)
+        asset: USDC_BASE,
+        payTo: PAY_TO,
+        maxTimeoutSeconds: 300,
+      },
+    ],
+    description: 'Broken Key Remapper Full Software Download',
+    mimeType: 'application/json',
     extensions: {
       ...declareDiscoveryExtension({
-        input: { broken_text: "Th3 qu1ck br0wn f0x jump5 0v3r th3 l4zy d0g" },
+        input: {
+          broken_text: 'test input',
+        },
         output: {
           example: {
             success: true,
-            message: "Thank you for your purchase!",
-            downloadLink: DOWNLOAD_LINK,
-            expiresIn: "24 hours"
-          }
-        }
-      })
-    }
-  }
+            downloadLink: 'https://drive.google.com/...',
+          },
+        },
+      }),
+    },
+  },
 };
 
-app.use(paymentMiddleware(routes, resourceServer));
+// ====================== x402 Payment Middleware ======================
+app.use(paymentMiddleware(protectedRoutes, resourceServer));
 
-// Protected route
+// ====================== Paid Endpoint ======================
 app.get('/download', (req, res) => {
   res.json({
     success: true,
-    message: "Thank you for your purchase!",
-    downloadLink: DOWNLOAD_LINK,
-    expiresIn: "24 hours",
-    version: "1.2"
+    message: 'Payment verified - thank you!',
+    downloadLink:
+      'https://drive.google.com/file/d/1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp/view?usp=drivesdk',
   });
 });
 
-app.use((req, res) => {
-  res.status(404).json({ error: "Route not found", tip: "Use /download" });
+// ====================== Health Check ======================
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'BrokenKeyRemapper x402 API',
+    network: NETWORK,
+  });
 });
 
-const PORT = process.env.PORT || 8080;
+// ====================== 404 ======================
+app.use((_req, res) => {
+  res.status(404).json({
+    error: 'Not found',
+    hint: 'Use GET /download',
+  });
+});
+
+// ====================== Start Server ======================
+const PORT = Number(process.env.PORT || 8080);
+
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Listening on port ${PORT}`);
 });
