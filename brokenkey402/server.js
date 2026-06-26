@@ -32,7 +32,8 @@ const PAY_TO = process.env.PAY_TO?.trim();
 const PRICE = '$0.01';
 const NETWORK = 'eip155:8453'; // Base Mainnet
 
-const FACILITATOR_URL = process.env.FACILITATOR_URL?.trim() || 'https://facilitator.payai.network';
+// === CDP Facilitator (official Coinbase) ===
+const FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402';
 
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
@@ -46,13 +47,16 @@ const PORT = Number(process.env.PORT) || 8080;
 
 const missing = [];
 if (!PAY_TO) missing.push('PAY_TO');
+if (!CDP_API_KEY_ID || !CDP_API_KEY_SECRET) {
+  missing.push('CDP_API_KEY_ID and/or CDP_API_KEY_SECRET');
+}
 if (!BUILDER_CODE_VALUE) {
   console.warn('⚠️ BUILDER_CODE env var is missing — payments will not be attributed on Base');
 }
 
 // ====================== Health / State ======================
 let x402Ready = false;
-let initError = null;   // ← Must stay at top level
+let initError = null;
 
 // ====================== Health check ======================
 app.get('/', (req, res) => {
@@ -78,13 +82,11 @@ async function setupX402() {
     throw new Error(`Missing env vars: ${missing.join(', ')}`);
   }
 
-  const isCDP = FACILITATOR_URL.includes('api.cdp.coinbase.com');
-
   const facilitatorClient = new HTTPFacilitatorClient({
     url: FACILITATOR_URL,
-    ...(isCDP && CDP_API_KEY_ID && CDP_API_KEY_SECRET
-      ? { headers: { Authorization: `Bearer \( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}` } }
-      : {}),
+    headers: {
+      Authorization: `Bearer \( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`,
+    },
   });
 
   const resourceServer = new x402ResourceServer(facilitatorClient).register(
@@ -92,9 +94,9 @@ async function setupX402() {
     new ExactEvmScheme()
   );
 
-  console.log('[v0] Initializing resourceServer...');
+  console.log('[v0] Initializing resourceServer with CDP facilitator...');
   await resourceServer.initialize();
-  console.log('[v0] resourceServer initialized');
+  console.log('[v0] resourceServer initialized OK');
 
   const routes = {
     'GET /download': {
@@ -131,7 +133,7 @@ async function setupX402() {
     });
   });
 
-  console.log('[v0] x402 middleware registered with Builder Code:', BUILDER_CODE_VALUE);
+  console.log('[v0] x402 middleware registered (CDP + Builder Code)');
 }
 
 // ====================== Boot ======================
@@ -139,12 +141,11 @@ async function main() {
   try {
     await setupX402();
     x402Ready = true;
-    console.log('[v0] ✅ x402 fully initialized');
+    console.log('[v0] ✅ x402 fully initialized with Coinbase CDP');
   } catch (err) {
     initError = err;
     console.error('[v0] ❌ Failed to initialize x402:', err);
 
-    // Fallback route if init failed
     app.get('/download', (req, res) => {
       res.status(500).json({
         error: 'x402 initialization failed',
@@ -153,7 +154,7 @@ async function main() {
     });
   }
 
-  // 404 handler — must be last
+  // 404 handler
   app.use((req, res) => {
     res.status(404).json({
       error: 'Route not found',
@@ -177,8 +178,8 @@ main().catch((err) => {
 
 // Keep alive
 process.on('unhandledRejection', (reason) => {
-  console.error('[v0] Unhandled rejection (ignored):', reason?.message || reason);
+  console.error('[v0] Unhandled rejection:', reason?.message || reason);
 });
 process.on('uncaughtException', (err) => {
-  console.error('[v0] Uncaught exception (ignored):', err?.message || err);
+  console.error('[v0] Uncaught exception:', err?.message || err);
 });
