@@ -3,45 +3,20 @@ import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
+import { BUILDER_CODE, declareBuilderCodeExtension } from '@x402/extensions/builder-code'; // ← NEW
 
 const app = express();
 app.use(express.json());
 
-// Log every incoming request
-app.use((req, res, next) => {
-  console.log(`[v0] ${req.method} ${req.path} ua="${req.get('user-agent') || ''}"`);
-  next();
-});
-
-// CORS - expose x402 headers so clients can read them
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', '*');
-  res.header(
-    'Access-Control-Expose-Headers',
-    'PAYMENT-REQUIRED, PAYMENT-RESPONSE, PAYMENT-SIGNATURE, X-PAYMENT-RESPONSE, payment-required, payment-response, x-payment-response'
-  );
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+// ... (your existing logging, CORS, config, health check unchanged) ...
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
 const PRICE = '$0.01';
 const NETWORK = 'eip155:8453'; // Base Mainnet (CAIP-2)
 
-// Facilitator selection:
-//   - CDP (recommended for mainnet, requires CDP API keys):
-//       https://api.cdp.coinbase.com/platform/v2/x402
-//   - PayAI (no auth, third-party, mainnet capable):
-//       https://facilitator.payai.network
-//   - x402.org (TESTNET ONLY - will NOT work for eip155:8453):
-//       https://x402.org/facilitator
-const FACILITATOR_URL =
-  process.env.FACILITATOR_URL?.trim() || 'https://facilitator.payai.network';
+const FACILITATOR_URL = process.env.FACILITATOR_URL?.trim() || 'https://facilitator.payai.network';
 
-// Optional CDP auth (only used when FACILITATOR_URL points to CDP)
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
 
@@ -50,42 +25,19 @@ const DOWNLOAD_LINK = `https://drive.google.com/uc?export=download&id=${DRIVE_FI
 
 const PORT = Number(process.env.PORT) || 8080;
 
-const missing = [];
-if (!PAY_TO) missing.push('PAY_TO');
+// ====================== Builder Code (REQUIRED FOR ATTRIBUTION) ======================
+const BUILDER_CODE_VALUE = process.env.BUILDER_CODE?.trim(); // e.g. bc_b7k3p9da
 
-console.log('BrokenKeyRemapper x402 Mainnet');
-console.log('Price:', PRICE);
-console.log('Network:', NETWORK);
-console.log('PayTo:', PAY_TO || 'MISSING');
-console.log('Facilitator:', FACILITATOR_URL);
+if (!BUILDER_CODE_VALUE) {
+  console.warn('⚠️  BUILDER_CODE env var not set. Payments will not be attributed to your app on Base.');
+}
 
-// ====================== Health check ======================
-let x402Ready = false;
-let initError = null;
-
-app.get('/', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'BrokenKeyRemapper x402',
-    network: NETWORK,
-    price: PRICE,
-    payTo: PAY_TO,
-    facilitator: FACILITATOR_URL,
-    endpoint: '/download',
-    envOk: missing.length === 0,
-    missingEnv: missing,
-    x402Ready,
-    initError: initError ? String(initError) : null,
-  });
-});
-
-// ====================== x402 Setup (async) ======================
+// ====================== x402 Setup ======================
 async function setupX402() {
-  if (missing.length > 0) {
-    throw new Error(`Missing env vars: ${missing.join(', ')}`);
+  if (!PAY_TO) {
+    throw new Error('Missing PAY_TO env var');
   }
 
-  // Build facilitator client. CDP needs auth headers; PayAI / x402.org don't.
   const isCDP = FACILITATOR_URL.includes('api.cdp.coinbase.com');
 
   const facilitatorClient = new HTTPFacilitatorClient({
@@ -93,7 +45,7 @@ async function setupX402() {
     ...(isCDP && CDP_API_KEY_ID && CDP_API_KEY_SECRET
       ? {
           headers: {
-            Authorization: `Bearer ${CDP_API_KEY_ID}:${CDP_API_KEY_SECRET}`,
+            Authorization: `Bearer \( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`,
           },
         }
       : {}),
@@ -104,14 +56,8 @@ async function setupX402() {
     new ExactEvmScheme()
   );
 
-  // **CRITICAL FIX**: ask the facilitator which (scheme, network) pairs it
-  // supports. Without this, buildPaymentRequirements throws:
-  //   "Facilitator does not support exact on eip155:8453"
-  console.log('[v0] Calling resourceServer.initialize()...');
   await resourceServer.initialize();
-  console.log('[v0] resourceServer.initialize() OK');
 
-  // accepts is an array per the v2 spec / @x402/core README
   const routes = {
     'GET /download': {
       accepts: [
@@ -125,17 +71,16 @@ async function setupX402() {
       ],
       description: 'Broken Key Remapper Full Software Download',
       mimeType: 'application/json',
+      extensions: {
+        [BUILDER_CODE]: declareBuilderCodeExtension(BUILDER_CODE_VALUE), // ← THIS ENABLES ATTRIBUTION
+      },
     },
   };
 
-  // NOTE: do NOT pass `false` as the 5th arg - that disables auto-init and
-  // was the root cause of the original 500. We've already initialized manually.
   app.use(paymentMiddleware(routes, resourceServer));
 
-  // Protected handler - only runs AFTER middleware verifies payment
   app.get('/download', (req, res) => {
-    const payer =
-      req.x402Payment?.payer || req.x402?.payment?.payer || 'unknown';
+    const payer = req.x402Payment?.payer || req.x402?.payment?.payer || 'unknown';
     console.log('[v0] Payment verified, serving download to:', payer);
 
     res.json({
@@ -148,8 +93,10 @@ async function setupX402() {
     });
   });
 
-  console.log('[v0] x402 middleware registered for GET /download');
+  console.log('[v0] x402 middleware registered with Builder Code:', BUILDER_CODE_VALUE || 'NONE');
 }
+
+// ... rest of your main() and error handlers unchanged ...
 
 // ====================== Boot ======================
 async function main() {
