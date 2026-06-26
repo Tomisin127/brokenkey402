@@ -8,7 +8,7 @@ import { BUILDER_CODE, declareBuilderCodeExtension } from '@x402/extensions/buil
 const app = express();
 app.use(express.json());
 
-// ... (logging + CORS unchanged) ...
+// Logging + CORS (unchanged - keep your existing blocks) ...
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
@@ -29,11 +29,8 @@ const PORT = Number(process.env.PORT) || 8080;
 
 const missing = [];
 if (!PAY_TO) missing.push('PAY_TO');
-if (!CDP_API_KEY_ID) missing.push('CDP_API_KEY_ID');
-if (!CDP_API_KEY_SECRET) missing.push('CDP_API_KEY_SECRET');
-if (!BUILDER_CODE_VALUE) {
-  console.warn('⚠️ BUILDER_CODE missing — no attribution on Base');
-}
+if (!CDP_API_KEY_ID || !CDP_API_KEY_SECRET) missing.push('CDP_API_KEY_ID / CDP_API_KEY_SECRET');
+if (!BUILDER_CODE_VALUE) console.warn('⚠️ BUILDER_CODE missing');
 
 // ====================== Health ======================
 let x402Ready = false;
@@ -43,8 +40,6 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     service: 'BrokenKeyRemapper x402',
-    network: NETWORK,
-    price: PRICE,
     facilitator: FACILITATOR_URL,
     builderCode: BUILDER_CODE_VALUE || 'NONE',
     x402Ready,
@@ -55,15 +50,14 @@ app.get('/', (req, res) => {
 // ====================== x402 Setup ======================
 async function setupX402() {
   if (missing.length > 0) {
-    throw new Error(`Missing env vars: ${missing.join(', ')}`);
+    throw new Error(`Missing env: ${missing.join(', ')}`);
   }
 
   const facilitatorClient = new HTTPFacilitatorClient({
     url: FACILITATOR_URL,
-    headers: {
-      // Correct format for CDP x402
+    createAuthHeaders: async () => ({
       Authorization: `Bearer \( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`,
-    },
+    }),
   });
 
   const resourceServer = new x402ResourceServer(facilitatorClient).register(
@@ -71,21 +65,19 @@ async function setupX402() {
     new ExactEvmScheme()
   );
 
-  console.log('[v0] Initializing with CDP facilitator...');
-  await resourceServer.initialize();   // This calls /supported
-  console.log('[v0] CDP facilitator ready');
+  console.log('[v0] Initializing CDP facilitator...');
+  await resourceServer.initialize();
+  console.log('[v0] ✅ CDP facilitator initialized');
 
   const routes = {
     'GET /download': {
-      accepts: [
-        {
-          scheme: 'exact',
-          price: PRICE,
-          network: NETWORK,
-          payTo: PAY_TO,
-          maxTimeoutSeconds: 60,
-        },
-      ],
+      accepts: [{
+        scheme: 'exact',
+        price: PRICE,
+        network: NETWORK,
+        payTo: PAY_TO,
+        maxTimeoutSeconds: 60,
+      }],
       description: 'Broken Key Remapper Full Software Download',
       mimeType: 'application/json',
       extensions: {
@@ -96,14 +88,11 @@ async function setupX402() {
 
   app.use(paymentMiddleware(routes, resourceServer));
 
-  // Protected route
   app.get('/download', (req, res) => {
     const payer = req.x402Payment?.payer || 'unknown';
-    console.log('[v0] Payment OK → serving to', payer);
-
+    console.log('[v0] Payment verified for:', payer);
     res.json({
       success: true,
-      message: 'Thank you!',
       downloadLink: DOWNLOAD_LINK,
       expiresIn: '24 hours',
       version: '1.2',
@@ -116,17 +105,16 @@ async function main() {
   try {
     await setupX402();
     x402Ready = true;
-    console.log('[v0] ✅ CDP x402 initialized successfully');
+    console.log('[v0] ✅ Server ready with CDP');
   } catch (err) {
     initError = err;
     console.error('[v0] ❌ Init failed:', err.message);
   }
 
-  // 404 last
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[v0] Server on :${PORT}`);
+    console.log(`[v0] Listening on :${PORT}`);
   });
 }
 
