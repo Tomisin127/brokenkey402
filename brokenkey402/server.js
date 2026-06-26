@@ -3,39 +3,79 @@ import express from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
-import { BUILDER_CODE, declareBuilderCodeExtension } from '@x402/extensions/builder-code'; // ← NEW
+import { BUILDER_CODE, declareBuilderCodeExtension } from '@x402/extensions/builder-code';
 
 const app = express();
 app.use(express.json());
 
-// ... (your existing logging, CORS, config, health check unchanged) ...
+// Log every incoming request
+app.use((req, res, next) => {
+  console.log(`[v0] ${req.method} \( {req.path} ua=" \){req.get('user-agent') || ''}"`);
+  next();
+});
+
+// CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', '*');
+  res.header(
+    'Access-Control-Expose-Headers',
+    'PAYMENT-REQUIRED, PAYMENT-RESPONSE, PAYMENT-SIGNATURE, X-PAYMENT-RESPONSE, payment-required, payment-response, x-payment-response'
+  );
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 // ====================== Config ======================
 const PAY_TO = process.env.PAY_TO?.trim();
 const PRICE = '$0.01';
-const NETWORK = 'eip155:8453'; // Base Mainnet (CAIP-2)
+const NETWORK = 'eip155:8453'; // Base Mainnet
 
 const FACILITATOR_URL = process.env.FACILITATOR_URL?.trim() || 'https://facilitator.payai.network';
 
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID?.trim();
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.trim();
 
+const BUILDER_CODE_VALUE = process.env.BUILDER_CODE?.trim();
+
 const DRIVE_FILE_ID = '1dCFyioeR_ST0OF1gZZzPXGn82U7Q-Vvp';
 const DOWNLOAD_LINK = `https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}`;
 
 const PORT = Number(process.env.PORT) || 8080;
 
-// ====================== Builder Code (REQUIRED FOR ATTRIBUTION) ======================
-const BUILDER_CODE_VALUE = process.env.BUILDER_CODE?.trim(); // e.g. bc_b7k3p9da
-
+const missing = [];
+if (!PAY_TO) missing.push('PAY_TO');
 if (!BUILDER_CODE_VALUE) {
-  console.warn('⚠️  BUILDER_CODE env var not set. Payments will not be attributed to your app on Base.');
+  console.warn('⚠️ BUILDER_CODE env var is missing — payments will not be attributed on Base');
 }
+
+// ====================== Health / State ======================
+let x402Ready = false;
+let initError = null;   // ← Must stay at top level
+
+// ====================== Health check ======================
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'BrokenKeyRemapper x402',
+    network: NETWORK,
+    price: PRICE,
+    payTo: PAY_TO,
+    facilitator: FACILITATOR_URL,
+    builderCode: BUILDER_CODE_VALUE || 'NONE',
+    endpoint: '/download',
+    envOk: missing.length === 0,
+    missingEnv: missing,
+    x402Ready,
+    initError: initError ? String(initError) : null,
+  });
+});
 
 // ====================== x402 Setup ======================
 async function setupX402() {
-  if (!PAY_TO) {
-    throw new Error('Missing PAY_TO env var');
+  if (missing.length > 0) {
+    throw new Error(`Missing env vars: ${missing.join(', ')}`);
   }
 
   const isCDP = FACILITATOR_URL.includes('api.cdp.coinbase.com');
@@ -43,11 +83,7 @@ async function setupX402() {
   const facilitatorClient = new HTTPFacilitatorClient({
     url: FACILITATOR_URL,
     ...(isCDP && CDP_API_KEY_ID && CDP_API_KEY_SECRET
-      ? {
-          headers: {
-            Authorization: `Bearer \( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}`,
-          },
-        }
+      ? { headers: { Authorization: `Bearer \( {CDP_API_KEY_ID}: \){CDP_API_KEY_SECRET}` } }
       : {}),
   });
 
@@ -56,7 +92,9 @@ async function setupX402() {
     new ExactEvmScheme()
   );
 
+  console.log('[v0] Initializing resourceServer...');
   await resourceServer.initialize();
+  console.log('[v0] resourceServer initialized');
 
   const routes = {
     'GET /download': {
@@ -72,7 +110,7 @@ async function setupX402() {
       description: 'Broken Key Remapper Full Software Download',
       mimeType: 'application/json',
       extensions: {
-        [BUILDER_CODE]: declareBuilderCodeExtension(BUILDER_CODE_VALUE), // ← THIS ENABLES ATTRIBUTION
+        [BUILDER_CODE]: declareBuilderCodeExtension(BUILDER_CODE_VALUE),
       },
     },
   };
@@ -93,36 +131,33 @@ async function setupX402() {
     });
   });
 
-  console.log('[v0] x402 middleware registered with Builder Code:', BUILDER_CODE_VALUE || 'NONE');
+  console.log('[v0] x402 middleware registered with Builder Code:', BUILDER_CODE_VALUE);
 }
-
-// ... rest of your main() and error handlers unchanged ...
 
 // ====================== Boot ======================
 async function main() {
   try {
     await setupX402();
     x402Ready = true;
+    console.log('[v0] ✅ x402 fully initialized');
   } catch (err) {
     initError = err;
-    console.error('[v0] Failed to initialize x402:', err);
+    console.error('[v0] ❌ Failed to initialize x402:', err);
 
+    // Fallback route if init failed
     app.get('/download', (req, res) => {
       res.status(500).json({
-        error: 'x402 not initialized',
+        error: 'x402 initialization failed',
         reason: err instanceof Error ? err.message : String(err),
-        missingEnv: missing,
       });
     });
   }
 
-  // 404 (must be last)
+  // 404 handler — must be last
   app.use((req, res) => {
-    console.log('[v0] 404 for', req.method, req.path);
     res.status(404).json({
       error: 'Route not found',
       path: req.path,
-      method: req.method,
       availableRoutes: ['GET /', 'GET /download'],
       x402Ready,
       initError: initError ? String(initError) : null,
@@ -135,12 +170,15 @@ async function main() {
   });
 }
 
-main();
+main().catch((err) => {
+  console.error('[v0] Fatal boot error:', err);
+  process.exit(1);
+});
 
-// Keep the process alive on transient errors
-process.on('unhandledRejection', (err) => {
-  console.error('[v0] Unhandled rejection (ignored to stay alive):', err?.message || err);
+// Keep alive
+process.on('unhandledRejection', (reason) => {
+  console.error('[v0] Unhandled rejection (ignored):', reason?.message || reason);
 });
 process.on('uncaughtException', (err) => {
-  console.error('[v0] Uncaught exception (ignored to stay alive):', err?.message || err);
+  console.error('[v0] Uncaught exception (ignored):', err?.message || err);
 });
